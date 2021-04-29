@@ -24,6 +24,7 @@ dependencies:
 - random
 - array
 - pretty-simple
+- split
 
 library:
   source-dirs: src
