@@ -12,32 +12,25 @@ import Game (GameNotes(gnRecord))
 
 {-
 
-Notes:
+General Algorithm
  - Create Full Map of Possibilites
- - Check For Solos (one possible in a cell)
- - Check For Onlys (only instance in a row/col/square)
-    - Comb through full game. If any occured, restart with a new map of possibilites.
-    - If nothing happened - Too Hard. Flag and Quit. 
-
- - Print possibilities and board nicely.
- - Check basic solver.
- - Keep list of removals. Remap, but then remove the knowns baddies.
-
- - Create possibilities
  - Start solving
+    - Check For Solos (one possible in a cell)
+    - Check For Onlys (only instance in a row/col/square)
  - Once out of easy solving, start guessing
     - Guess
-    - Start solving
+    - Restart solving from here.
     - Guess
-    - Start Solving
+    - Restart solving from here.
     - No Guesses Available?
         - REGUESS:
-        - Back out last guess, add to list of impossible, and reguess and continue.
-    - No reguess available?
-        - Reset cImpossible in last guess cell.
-        - Then REGUESS one guess before that.
+        - Back out last guess and all the moves made after the last guess
+        - Add to list of impossible moves
+        - Reguess and continue.
+    - No Reguess available?
+        - Reset cImpossible this cell.
+        - Then reguess one guess before that.
 
-    - When I send it back to solve... could it be invalid?
 -}
 
 startSolver :: Game -> Either Game Game
@@ -247,9 +240,9 @@ checkForOnlyThenLoad index@(row, col) game
     | otherwise = game
   where
     possibles = cPossible (gBoard game ! index)
-    rowLefts = leftsInRow row game \\ possibles
-    colLefts = leftsInCol col game \\ possibles
-    sqrLefts = leftsInSquare index game \\ possibles
+    rowLefts = possibleInRow row game \\ possibles
+    colLefts = possibleInCol col game \\ possibles
+    sqrLefts = possibleInSquare index game \\ possibles
     isOnly li = not $ all (li `elem`) [rowLefts, colLefts, sqrLefts]
     eachOnlyBool = map isOnly possibles
     firstTrueIndex = elemIndex True eachOnlyBool
@@ -296,12 +289,3 @@ applyToSquare f loc item game = foldr applyTo game listRange
     x = numOfBigSquareCols game
     littleRange = ( (x*(bigR-1)+1, x*(bigC-1)+1),   (x*bigR, x*bigC) )
     listRange = range littleRange
-
-{-
-
-Why isn't it finishing the solve? Likely guessing and not backing out correctly.
-Double check basic fill - spot check, then watch how it handles bad guesses
-
-Add guess counter to see if it's even guessing, and back out counter
-
--}
