@@ -42,13 +42,11 @@ startSolver game
     | otherwise = solveGame game
   where
     maxIter = 81
-    solverOut = solver maxIter game
-    finalGame = last solverOut 
+    finalGame = solver maxIter game
 
 
 solveGame :: Game -> Either Game Game
 solveGame game
-    | null solverOut        = error "Something went wrong with the solver"
     | somethingIsSolved         = Right $ addNote "SUCCESS!" finalGame
     | otherwise                 = maybe
                                   (Left $ addNote "Game was evenutally invalid." mappedFinal) 
@@ -58,16 +56,22 @@ solveGame game
     resetRecordGame = game -- resetRecord game
     mappedGame = mapOutPossibilities resetRecordGame
     maxIter = 81
-    solverOut = solver maxIter resetRecordGame
-    finalGame = last solverOut
+    finalGame = solver maxIter resetRecordGame
     mappedFinal = mapOutPossibilities finalGame
     somethingIsSolved = isSolved mappedFinal
     guessAdded = guessNextCell mappedFinal
 
-solver :: Int -> Game -> [Game]
+solver :: Int -> Game -> Game
 solver limit gameIn = gamesOut
   where
-    gamesOut = take limit $ iterate mapAndFill gameIn
+    gamesOut = converge (==) $ iterate mapAndFill gameIn
+
+converge :: (a -> a -> Bool) -> [a] -> a
+converge p [] = error "Empty list provided to `converge`"
+converge p [x] = x
+converge p (x:ys@(y:_))
+    | p x y     = y
+    | otherwise = converge p ys 
 
 -- | Look for a guess, if one doesn't exist
 guessNextCell :: Game -> Maybe Game
@@ -101,8 +105,9 @@ guessAgain g
 -- | Go to target cell, reset cAnswer, and cImpossible.
 resetCellAfterBadGuess :: Game -> ((Row, Col), Int) -> Game
 resetCellAfterBadGuess game (index, _) = let
-    cellIn = gBoard game ! index
-    cellOut = cellIn { cImpossible = [] } -- No need to update cAnswer, that is already set to nothing
+    --cellIn = gBoard game ! index
+    --cellOut = cellIn { cImpossible = [] } -- No need to update cAnswer, that is already set to nothing
+    cellOut = newCell
     modRecord = addToRecord ( index 
                             , 0
                             , "Reset Impossible."
@@ -172,8 +177,7 @@ rewindUpToSpot game (index, _) = until (lastRecordFromHere index) undoLastRecord
 undoLastRecord :: Game -> Game
 undoLastRecord game = let
     (index, _, _) = (head . gnRecord . gNote) game
-    cellIn = gBoard game ! index
-    cellOut = cellIn { cAnswer = Nothing }
+    cellOut = newCell
   in 
     game { gBoard = gBoard game // [(index, cellOut)]
          , gNote = modRecord tail $ gNote game}

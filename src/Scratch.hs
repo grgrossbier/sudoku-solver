@@ -118,3 +118,5 @@ readGamesFromFile fname = do
         games = map (readAsGame . unlines) splitEvery9
     return games
 
+gms :: IO [Game]
+gms = readGamesFromFile "sudoku_hard.txt"
