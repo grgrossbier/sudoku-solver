@@ -33,6 +33,8 @@ General Algorithm
 
 -}
 
+-- | Start point to solve a game. Checks for immidaite gotchas and then sends
+--   it along.
 startSolver :: Game -> Either Game Game
 startSolver game
     | (isInvalid . mapOutPossibilities) game  = 
@@ -44,53 +46,53 @@ startSolver game
     maxIter = 81
     finalGame = solver maxIter game
 
-
+-- | Main iteration engine. 1) Run basic solving methods. 2) Guess is necessary.
+--                          3) Recurse after guess.
 solveGame :: Game -> Either Game Game
 solveGame game
-    | somethingIsSolved         = Right $ addNote "SUCCESS!" finalGame
+    | somethingIsSolved         = Right $ addNote "SUCCESS!" lastBasicIteration
     | otherwise                 = maybe
-                                  (Left $ addNote "Game was evenutally invalid." mappedFinal) 
+                                  (Left $ addNote 
+                                          "Game was evenutally invalid." 
+                                          mappedFinal) 
                                   solveGame 
                                   guessAdded 
   where
     resetRecordGame = game -- resetRecord game
     mappedGame = mapOutPossibilities resetRecordGame
     maxIter = 81
-    finalGame = solver maxIter resetRecordGame
-    mappedFinal = mapOutPossibilities finalGame
+    lastBasicIteration = solver maxIter resetRecordGame
+    mappedFinal = mapOutPossibilities lastBasicIteration
     somethingIsSolved = isSolved mappedFinal
     guessAdded = guessNextCell mappedFinal
 
+-- | Iterate basic solving mechanic (mapAndFill) until 
+--   no new moves have been made. 
 solver :: Int -> Game -> Game
 solver limit gameIn = gamesOut
   where
     gamesOut = converge (==) $ iterate mapAndFill gameIn
 
-converge :: (a -> a -> Bool) -> [a] -> a
-converge p [] = error "Empty list provided to `converge`"
-converge p [x] = x
-converge p (x:ys@(y:_))
-    | p x y     = y
-    | otherwise = converge p ys 
-
--- | Look for a guess, if one doesn't exist
+-- | Look for a guess, if one doesn't exist then try to reguess the last guess.
+--   If no guess available, and no reguesses available, return nothing. Game
+--   was invalid.
 guessNextCell :: Game -> Maybe Game
 guessNextCell game = let
-    remapped = mapOutPossibilities game
     nextGuess = getNextGuess game
   in 
-    if isInvalid remapped
-    then guessAgain remapped    
+    if isInvalid game
+    then guessAgain game    
     else case nextGuess of
-        Just guess -> Just $ setGuess guess remapped
-        Nothing -> guessAgain remapped
+        Just guess -> Just $ setGuess guess game
+        Nothing -> guessAgain game
 
+-- | Back out the last guess, then try to guess again. If no more guesses exist
+--   in this cell, reset it and reguess an earlier guess. 
 guessAgain :: Game -> Maybe Game
-guessAgain g
+guessAgain game
     | isNothing lastGuess = Nothing
     | otherwise = gameWithNewGuess 
   where
-    game = mapOutPossibilities g
     lastGuess = safeHead $ gRecentGuesses game -- Pull last guess
     guessRemoved = maybe (error "lastGuess was Nothing") 
                          (removeGuess game) -- Remove guess, and add last guess to impossible list
@@ -102,21 +104,22 @@ guessAgain g
                                       (resetCellAfterBadGuess guessRemoved)
                                       lastGuess
 
--- | Go to target cell, reset cAnswer, and cImpossible.
+-- | Go to target cell, reset it.
 resetCellAfterBadGuess :: Game -> ((Row, Col), Int) -> Game
 resetCellAfterBadGuess game (index, _) = let
-    --cellIn = gBoard game ! index
-    --cellOut = cellIn { cImpossible = [] } -- No need to update cAnswer, that is already set to nothing
-    cellOut = newCell
     modRecord = addToRecord ( index 
                             , 0
                             , "Reset Impossible."
                             ) 
                             $ gNote game  
   in
-    game { gBoard = gBoard game // [(index, cellOut)]
-         , gNote = modRecord }
-    
+    mapOutPossibilities
+    $ game { gBoard = gBoard game // [(index, newCell)]
+           , gNote = modRecord }
+
+-- | Given a game, return the next guess. 
+--   Look to the first available cell and take the first guess after removing
+--   cImpossible from cPossible.   
 getNextGuess :: Game -> Maybe ((Int, Int), Int)
 getNextGuess game
     | null firstCellPossibilities = Nothing
@@ -139,17 +142,20 @@ setGuess (index, val) game = let
                             ) 
                             modGuessCt
   in
-    game { gBoard = gBoard game // [(index, cellOut)] 
-         , gRecentGuesses = (index, val) : gRecentGuesses game
-         , gNote = modRecord}
+    mapOutPossibilities
+    $ game { gBoard = gBoard game // [(index, cellOut)] 
+           , gRecentGuesses = (index, val) : gRecentGuesses game
+           , gNote = modRecord}
 
+-- | An empty cell has no possibilities.
 isInvalid :: Game -> Bool
 isInvalid game = any null cPossibleLists
   where
     cells = elems $ gBoard $ mapOutPossibilities game
     cPossibleLists = map cPossible (filter (isNothing . cAnswer) cells)
     
--- TODO - remove guess and add to cImpossible
+-- | Rewind all changes made before index was changed, then
+--   remove answer in that index and add old answer to cImpossible
 removeGuess :: Game -> ((Int, Int), Int) -> Game
 removeGuess game (index, val) = let
     rewound = rewindUpToSpot game (index, val)
@@ -164,9 +170,11 @@ removeGuess game (index, val) = let
                             ) 
                             modBackOut
   in
-    rewound { gBoard = gBoard rewound // [(index, cellOut)] 
-            , gRecentGuesses = tail $ gRecentGuesses rewound
-            , gNote = modRecord}
+    mapOutPossibilities
+    $ rewound { gBoard = gBoard rewound // [(index, cellOut)] 
+              , gRecentGuesses = tail $ gRecentGuesses rewound
+              , gNote = modRecord}
+
 
 rewindUpToSpot :: Game -> ((Int, Int), Int) -> Game
 rewindUpToSpot game (index, _) = until (lastRecordFromHere index) undoLastRecord game
@@ -184,21 +192,22 @@ undoLastRecord game = let
 
 
 mapAndFill :: Game -> Game
-mapAndFill game = game''''
+mapAndFill game = game'''
   where
     game' = mapOutPossibilities game
     game'' = fillInSolos game'
-    game''' = mapOutPossibilities game''
-    game'''' = fillInOnlys game'''
+    game''' = fillInOnlys game''
 
 mapOutPossibilities :: Game -> Game
 mapOutPossibilities game = foldr loadPossibilitiesIntoGame game possiblesByIndex
   where
     possiblesByIndex = map (possibilitiesForCell game) (range nn)
 
-
 fillInSolos :: Game -> Game
-fillInSolos game = foldr flipSoloThenUpdate game (range nn)
+fillInSolos game = mapOutPossibilities $ foldr 
+                                         flipSoloThenUpdate 
+                                         game 
+                                         (range nn)
 
 flipSoloThenUpdate :: (Int, Int) -> Game -> Game
 flipSoloThenUpdate index game
@@ -215,7 +224,10 @@ flipSolo cell
     | otherwise = Nothing
 
 fillInOnlys :: Game -> Game
-fillInOnlys game = foldr checkForOnlyThenLoad game $ range nn
+fillInOnlys game = mapOutPossibilities $ foldr 
+                                         checkForOnlyThenLoad 
+                                         game
+                                         (range nn)
 
 isSolved :: Game -> Bool
 isSolved game = not $ any isEmptyCell $ elems $ gBoard game

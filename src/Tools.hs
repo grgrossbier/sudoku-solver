@@ -236,3 +236,13 @@ modRecord f gn = let
     mod = f old
   in
     gn { gnRecord = mod }
+
+-- | Given a list, look at adjacent pairs in order and return a result once a
+--   predicate is statisfied. Once found, return the second item in that pair.
+--   Ex: `converge (<) [5,4,3,2,2,1,7,8,9]` returns `7`
+converge :: (a -> a -> Bool) -> [a] -> a
+converge p [] = error "Empty list provided to `converge`"
+converge p [x] = x
+converge p (x:ys@(y:_))
+    | p x y     = y
+    | otherwise = converge p ys 
