@@ -175,13 +175,15 @@ removeGuess game (index, val) = let
               , gRecentGuesses = tail $ gRecentGuesses rewound
               , gNote = modRecord}
 
-
+-- | Following the path of (gnRecord . gNotes), undo all the assignments that
+--   have heppened up to BUT NOT INCLUDING the specified location.
 rewindUpToSpot :: Game -> ((Int, Int), Int) -> Game
 rewindUpToSpot game (index, _) = until (lastRecordFromHere index) undoLastRecord game
   where 
     fst3 (x,_,_) = x
     lastRecordFromHere i = (==i) . fst3 . head . gnRecord . gNote
 
+-- | Pop off the `head` of the (gnRecord . gNotes) and reset that cell. 
 undoLastRecord :: Game -> Game
 undoLastRecord game = let
     (index, _, _) = (head . gnRecord . gNote) game
@@ -190,7 +192,7 @@ undoLastRecord game = let
     game { gBoard = gBoard game // [(index, cellOut)]
          , gNote = modRecord tail $ gNote game}
 
-
+-- | Fill in the cells using the easy algorithms. 
 mapAndFill :: Game -> Game
 mapAndFill game = game'''
   where
@@ -198,17 +200,20 @@ mapAndFill game = game'''
     game'' = fillInSolos game'
     game''' = fillInOnlys game''
 
+-- | Fill in cPossible based on what is in the same row / col / square.
 mapOutPossibilities :: Game -> Game
 mapOutPossibilities game = foldr loadPossibilitiesIntoGame game possiblesByIndex
   where
     possiblesByIndex = map (possibilitiesForCell game) (range nn)
 
+-- | Looking at each cell, fill in a cell if there is only one cPossible option
 fillInSolos :: Game -> Game
 fillInSolos game = mapOutPossibilities $ foldr 
                                          flipSoloThenUpdate 
                                          game 
                                          (range nn)
 
+-- | If only one cPossible in the cell, set it.
 flipSoloThenUpdate :: (Int, Int) -> Game -> Game
 flipSoloThenUpdate index game
     | isNothing flippedCell = game
@@ -217,21 +222,27 @@ flipSoloThenUpdate index game
     flippedCell = flipSolo $ (gBoard game) ! index
     solo = fromJust flippedCell
 
+-- | If empty and cPossible only have one option. Return that Answer.
 flipSolo :: Cell -> Maybe Int
 flipSolo cell
     | isJust (cAnswer cell) = Nothing
     | length (cPossible cell) == 1 = Just $ head $ cPossible cell
     | otherwise = Nothing
 
+-- | Looking at each cell, fill in a cell if it has the only instance of a 
+--   number with the row, col, or square.
 fillInOnlys :: Game -> Game
 fillInOnlys game = mapOutPossibilities $ foldr 
                                          checkForOnlyThenLoad 
                                          game
                                          (range nn)
 
+-- | If all cells are filled, then we're solved.
 isSolved :: Game -> Bool
 isSolved game = not $ any isEmptyCell $ elems $ gBoard game
 
+-- | Looking at the surrounding col / row / square, and determine all the 
+--   possible fill. 
 possibilitiesForCell :: Game -> (Int, Int) -> ((Int, Int), [Int])
 possibilitiesForCell game index@(row, col)
     | isJust (cAnswer cellIn) = (index, [])
@@ -242,6 +253,7 @@ possibilitiesForCell game index@(row, col)
     colNums = numInCol col game
     sqrNums = numInSquare index game
 
+-- | Load numbers into cPossible
 loadPossibilitiesIntoGame :: ((Int, Int), [Int]) -> Game -> Game
 loadPossibilitiesIntoGame (index, xs) game = let
     cellIn = gBoard game ! index
@@ -249,6 +261,7 @@ loadPossibilitiesIntoGame (index, xs) game = let
   in 
     game { gBoard = gBoard game // [(index, cellOut)] }
 
+-- | 
 checkForOnlyThenLoad :: (Int, Int) -> Game -> Game
 checkForOnlyThenLoad index@(row, col) game
     | isJust firstTrueIndex = 
@@ -263,6 +276,7 @@ checkForOnlyThenLoad index@(row, col) game
     eachOnlyBool = map isOnly possibles
     firstTrueIndex = elemIndex True eachOnlyBool
 
+-- | Set an Answer, then clear that possibility from row / col / square.
 placeAnswerAndClear :: String -> (Int, Int) -> Int -> Game -> Game
 placeAnswerAndClear note index@(row, col) num game = removedFromSqr
   where
@@ -280,6 +294,7 @@ placeAnswerAndClear note index@(row, col) num game = removedFromSqr
     removedFromCols = applyToCol removePossibility col num removedFromRows
     removedFromSqr = applyToSquare removePossibility (row,col) num removedFromCols
 
+-- | Remove a number from cPossible
 removePossibility :: ((Int, Int), Int) -> Game -> Game
 removePossibility (index, val) game = let
     cellIn = gBoard game ! index
@@ -287,6 +302,7 @@ removePossibility (index, val) game = let
   in
     game { gBoard = gBoard game // [(index, cellOut)] }
 
+-- | Apply a function to a row. This isn't written well.
 applyToRow :: (((Int, Int), Int) -> Game -> Game) -> Int -> Int -> Game -> Game
 applyToRow f row item game = foldr applyTo game [1..n]
   where
